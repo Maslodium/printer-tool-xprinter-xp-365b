@@ -1,33 +1,33 @@
-﻿# Xprinter Label Editor
+﻿# Средство для печати принтера Xprinter XP-365B
 
-Small Windows PowerShell/WinForms label editor for Xprinter XP-365B and compatible TSPL thermal label printers.
+Небольшой Windows PowerShell/WinForms редактор этикеток для Xprinter XP-365B и совместимых TSPL термопринтеров.
 
-## Features
+## Возможности
 
-- Direct TSPL bitmap printing, bypassing Windows page layout scaling issues.
-- Default label size: 57 x 39 mm at 203 DPI.
-- Text editor with font selection from installed Windows fonts.
-- No-wrap mode for short labels.
-- Preview based on the exact bitmap sent to the printer.
-- Image import with automatic downsampling for large images.
-- Image scale and alignment controls.
-- Label feed, home, and gap calibration commands.
+- Прямая TSPL bitmap-печать без масштабирования страниц Windows.
+- Размер этикетки по умолчанию: 57 x 39 мм при 203 DPI.
+- Редактор текста с выбором установленных Windows-шрифтов.
+- Режим No wrap для коротких однострочных этикеток.
+- Предпросмотр на основе той же bitmap-картинки, которая отправляется в принтер.
+- Импорт изображений с автоматическим уменьшением больших файлов.
+- Настройки масштаба и выравнивания изображения.
+- Команды Home, Feed label и Calibrate для подачи и калибровки этикеток.
 
-## Requirements
+## Требования
 
 - Windows PowerShell 5.1
-- Windows Forms and System.Drawing
-- Installed Xprinter XP-365B printer driver
-- Printer connected as a Windows printer, default name: `Xprinter XP-365B`
+- Windows Forms и System.Drawing
+- Установленный драйвер Xprinter XP-365B
+- Принтер в Windows с именем `Xprinter XP-365B`
 
-## Run
+## Запуск
 
 ```powershell
 powershell -STA -NoProfile -ExecutionPolicy Bypass -File .\LabelPrinter.ps1
 ```
 
-## Notes
+## Примечания
 
-The printer is treated as a RAW TSPL output device for actual printing. The Windows printer driver is used only as a transport channel to the USB printer.
+Принтер используется как RAW TSPL-устройство. Windows-драйвер нужен только как транспорт до USB-принтера.
 
-Large images are downsampled to a working copy before being fitted into the 203 DPI label bitmap, so high-resolution images can be used safely.
+Большие изображения при загрузке уменьшаются до рабочей копии максимум 1200 px по длинной стороне, а затем вписываются в bitmap этикетки 203 DPI.
