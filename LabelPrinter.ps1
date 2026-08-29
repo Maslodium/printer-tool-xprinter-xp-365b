@@ -3,10 +3,14 @@ param(
     [string]$PrinterName = "Xprinter XP-365B",
     [string]$FontFamily = "ST MicroSquare Ex",
     [int]$FontSize = 13,
+    [bool]$Bold = $true,
+    [bool]$Italic = $false,
+    [bool]$Underline = $false,
+    [bool]$Strikeout = $false,
     [double]$LabelWidthMm = 57,
     [double]$LabelHeightMm = 39,
     [double]$GapMm = 3,
-    [double]$MarginMm = 4,
+    [double]$MarginMm = 0,
     [double]$OffsetXmm = 0,
     [double]$OffsetYmm = 0,
     [string]$HorizontalAlign = "Center",
@@ -109,6 +113,15 @@ function Get-AlignValue([string]$value, [string]$axis) {
     return [System.Drawing.StringAlignment]::Center
 }
 
+function Get-FontStyle([bool]$UseBold, [bool]$UseItalic, [bool]$UseUnderline, [bool]$UseStrikeout) {
+    $style = [System.Drawing.FontStyle]::Regular
+    if ($UseBold) { $style = $style -bor [System.Drawing.FontStyle]::Bold }
+    if ($UseItalic) { $style = $style -bor [System.Drawing.FontStyle]::Italic }
+    if ($UseUnderline) { $style = $style -bor [System.Drawing.FontStyle]::Underline }
+    if ($UseStrikeout) { $style = $style -bor [System.Drawing.FontStyle]::Strikeout }
+    return $style
+}
+
 function Get-TextRectangle {
     param(
         [System.Drawing.RectangleF]$PageRect,
@@ -145,6 +158,10 @@ function Draw-LabelContent {
         [string]$HAlign,
         [string]$VAlign,
         [bool]$DisableWrap,
+        [bool]$UseBold,
+        [bool]$UseItalic,
+        [bool]$UseUnderline,
+        [bool]$UseStrikeout,
         [bool]$Preview
     )
 
@@ -220,7 +237,7 @@ function Draw-LabelContent {
         $format.FormatFlags = [System.Drawing.StringFormatFlags]::NoWrap
     }
 
-    $fontStyle = [System.Drawing.FontStyle]::Bold
+    $fontStyle = Get-FontStyle -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout
     $drawSize = [Math]::Max(6, $Size)
     $font = New-Object System.Drawing.Font($Family, $drawSize, $fontStyle, [System.Drawing.GraphicsUnit]::Point)
 
@@ -396,7 +413,11 @@ function New-LabelBitmap {
         [double]$Ymm,
         [string]$HAlign,
         [string]$VAlign,
-        [bool]$DisableWrap
+        [bool]$DisableWrap,
+        [bool]$UseBold,
+        [bool]$UseItalic,
+        [bool]$UseUnderline,
+        [bool]$UseStrikeout
     )
 
     $widthDots = Convert-MmToDots $WidthMm
@@ -424,6 +445,10 @@ function New-LabelBitmap {
             -HAlign $HAlign `
             -VAlign $VAlign `
             -DisableWrap $DisableWrap `
+            -UseBold $UseBold `
+            -UseItalic $UseItalic `
+            -UseUnderline $UseUnderline `
+            -UseStrikeout $UseStrikeout `
             -Preview $false
     }
     finally {
@@ -451,12 +476,16 @@ function Draw-PrinterBitmapPreview {
         [double]$Ymm,
         [string]$HAlign,
         [string]$VAlign,
-        [bool]$DisableWrap
+        [bool]$DisableWrap,
+        [bool]$UseBold,
+        [bool]$UseItalic,
+        [bool]$UseUnderline,
+        [bool]$UseStrikeout
     )
 
     $Graphics.Clear([System.Drawing.Color]::FromArgb(245, 246, 248))
 
-    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap
+    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout
     try {
         $scale = [Math]::Min(($PreviewHost.ClientSize.Width - 36) / $bitmap.Width, ($PreviewHost.ClientSize.Height - 36) / $bitmap.Height)
         $drawW = $bitmap.Width * $scale
@@ -517,6 +546,10 @@ function Invoke-TsplBitmapPrint {
         [string]$HAlign,
         [string]$VAlign,
         [bool]$DisableWrap,
+        [bool]$UseBold,
+        [bool]$UseItalic,
+        [bool]$UseUnderline,
+        [bool]$UseStrikeout,
         [int]$CopyCount
     )
 
@@ -528,7 +561,7 @@ function Invoke-TsplBitmapPrint {
         throw "Font '$Family' was not found."
     }
 
-    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap
+    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout
     try {
         $imageBytes = Convert-BitmapToTsplBytes -Bitmap $bitmap
         $widthBytes = [int][Math]::Ceiling($bitmap.Width / 8)
@@ -573,14 +606,18 @@ function Invoke-LabelPrint {
         [string]$HAlign,
         [string]$VAlign,
         [bool]$DisableWrap,
+        [bool]$UseBold,
+        [bool]$UseItalic,
+        [bool]$UseUnderline,
+        [bool]$UseStrikeout,
         [int]$CopyCount
     )
 
-    Invoke-TsplBitmapPrint -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -TargetPrinter $TargetPrinter -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -MediaGapMm $MediaGapMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -CopyCount $CopyCount
+    Invoke-TsplBitmapPrint -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -TargetPrinter $TargetPrinter -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -MediaGapMm $MediaGapMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -CopyCount $CopyCount
 }
 
 if ($PrintNow) {
-    Invoke-LabelPrint -LabelText $Text -LabelImage $null -ImageScalePercent 100 -ImageHAlign "Center" -ImageVAlign "Middle" -TargetPrinter $PrinterName -Family $FontFamily -Size $FontSize -WidthMm $LabelWidthMm -HeightMm $LabelHeightMm -MediaGapMm $GapMm -InsetMm $MarginMm -Xmm $OffsetXmm -Ymm $OffsetYmm -HAlign $HorizontalAlign -VAlign $VerticalAlign -DisableWrap $NoWrap -CopyCount $Copies
+    Invoke-LabelPrint -LabelText $Text -LabelImage $null -ImageScalePercent 100 -ImageHAlign "Center" -ImageVAlign "Middle" -TargetPrinter $PrinterName -Family $FontFamily -Size $FontSize -WidthMm $LabelWidthMm -HeightMm $LabelHeightMm -MediaGapMm $GapMm -InsetMm $MarginMm -Xmm $OffsetXmm -Ymm $OffsetYmm -HAlign $HorizontalAlign -VAlign $VerticalAlign -DisableWrap $NoWrap -UseBold $Bold -UseItalic $Italic -UseUnderline $Underline -UseStrikeout $Strikeout -CopyCount $Copies
     Write-Host "Sent to printer."
     exit 0
 }
@@ -588,7 +625,7 @@ if ($PrintNow) {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Label editor"
 $form.Width = 1040
-$form.Height = 610
+$form.Height = 670
 $form.StartPosition = "CenterScreen"
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
@@ -603,6 +640,69 @@ $textBox.ScrollBars = "Vertical"
 $textBox.WordWrap = $false
 $textBox.Text = $Text
 $textBox.Font = New-Object System.Drawing.Font($FontFamily, 14, [System.Drawing.FontStyle]::Bold)
+$script:textHistory = New-Object 'System.Collections.Generic.List[string]'
+$script:textHistory.Add($textBox.Text)
+$script:textHistoryIndex = 0
+$script:isApplyingTextHistory = $false
+
+function Save-TextHistory([string]$value) {
+    if ($script:isApplyingTextHistory) {
+        return
+    }
+
+    if ($script:textHistoryIndex -ge 0 -and $script:textHistory[$script:textHistoryIndex] -eq $value) {
+        return
+    }
+
+    $nextIndex = $script:textHistoryIndex + 1
+    if ($nextIndex -lt $script:textHistory.Count) {
+        $script:textHistory.RemoveRange($nextIndex, $script:textHistory.Count - $nextIndex)
+    }
+
+    $script:textHistory.Add($value)
+    $script:textHistoryIndex = $script:textHistory.Count - 1
+}
+
+$textBox.Add_TextChanged({
+    Save-TextHistory $textBox.Text
+})
+
+$textBox.Add_KeyDown({
+    param($sender, $eventArgs)
+
+    if ($eventArgs.Control -and $eventArgs.Shift -and $eventArgs.KeyCode -eq [System.Windows.Forms.Keys]::Z) {
+        if ($script:textHistoryIndex -lt ($script:textHistory.Count - 1)) {
+            $script:textHistoryIndex += 1
+            $script:isApplyingTextHistory = $true
+            try {
+                $sender.Text = $script:textHistory[$script:textHistoryIndex]
+                $sender.SelectionStart = $sender.TextLength
+            }
+            finally {
+                $script:isApplyingTextHistory = $false
+            }
+        }
+        $eventArgs.SuppressKeyPress = $true
+        $eventArgs.Handled = $true
+        return
+    }
+
+    if ($eventArgs.Control -and -not $eventArgs.Shift -and $eventArgs.KeyCode -eq [System.Windows.Forms.Keys]::Z) {
+        if ($script:textHistoryIndex -gt 0) {
+            $script:textHistoryIndex -= 1
+            $script:isApplyingTextHistory = $true
+            try {
+                $sender.Text = $script:textHistory[$script:textHistoryIndex]
+                $sender.SelectionStart = $sender.TextLength
+            }
+            finally {
+                $script:isApplyingTextHistory = $false
+            }
+        }
+        $eventArgs.SuppressKeyPress = $true
+        $eventArgs.Handled = $true
+    }
+})
 
 $preview = New-Object System.Windows.Forms.Panel
 $preview.Left = 500
@@ -730,9 +830,41 @@ $noWrapBox.Height = 22
 $noWrapBox.Text = "No wrap"
 $noWrapBox.Checked = [bool]$NoWrap
 
+$boldBox = New-Object System.Windows.Forms.CheckBox
+$boldBox.Left = 16
+$boldBox.Top = 408
+$boldBox.Width = 76
+$boldBox.Height = 22
+$boldBox.Text = "Bold"
+$boldBox.Checked = [bool]$Bold
+
+$italicBox = New-Object System.Windows.Forms.CheckBox
+$italicBox.Left = 94
+$italicBox.Top = 408
+$italicBox.Width = 76
+$italicBox.Height = 22
+$italicBox.Text = "Italic"
+$italicBox.Checked = [bool]$Italic
+
+$underlineBox = New-Object System.Windows.Forms.CheckBox
+$underlineBox.Left = 172
+$underlineBox.Top = 408
+$underlineBox.Width = 94
+$underlineBox.Height = 22
+$underlineBox.Text = "Underline"
+$underlineBox.Checked = [bool]$Underline
+
+$strikeoutBox = New-Object System.Windows.Forms.CheckBox
+$strikeoutBox.Left = 268
+$strikeoutBox.Top = 408
+$strikeoutBox.Width = 78
+$strikeoutBox.Height = 22
+$strikeoutBox.Text = "Strikeout"
+$strikeoutBox.Checked = [bool]$Strikeout
+
 $hAlignBox = New-Object System.Windows.Forms.ComboBox
 $hAlignBox.Left = 16
-$hAlignBox.Top = 434
+$hAlignBox.Top = 462
 $hAlignBox.Width = 190
 $hAlignBox.DropDownStyle = "DropDownList"
 [void]$hAlignBox.Items.Add("Left")
@@ -743,7 +875,7 @@ if ($hAlignBox.SelectedIndex -lt 0) { $hAlignBox.SelectedItem = "Center" }
 
 $vAlignBox = New-Object System.Windows.Forms.ComboBox
 $vAlignBox.Left = 236
-$vAlignBox.Top = 434
+$vAlignBox.Top = 462
 $vAlignBox.Width = 190
 $vAlignBox.DropDownStyle = "DropDownList"
 [void]$vAlignBox.Items.Add("Top")
@@ -758,20 +890,20 @@ $script:loadedImagePath = ""
 $imageButton = New-Object System.Windows.Forms.Button
 $imageButton.Text = "Load image"
 $imageButton.Left = 16
-$imageButton.Top = 482
+$imageButton.Top = 510
 $imageButton.Width = 100
 $imageButton.Height = 34
 
 $clearImageButton = New-Object System.Windows.Forms.Button
 $clearImageButton.Text = "Clear image"
 $clearImageButton.Left = 126
-$clearImageButton.Top = 482
+$clearImageButton.Top = 510
 $clearImageButton.Width = 100
 $clearImageButton.Height = 34
 
 $imageScaleBox = New-Object System.Windows.Forms.NumericUpDown
 $imageScaleBox.Left = 236
-$imageScaleBox.Top = 482
+$imageScaleBox.Top = 510
 $imageScaleBox.Width = 88
 $imageScaleBox.Minimum = 5
 $imageScaleBox.Maximum = 100
@@ -779,7 +911,7 @@ $imageScaleBox.Value = 100
 
 $imageHAlignBox = New-Object System.Windows.Forms.ComboBox
 $imageHAlignBox.Left = 16
-$imageHAlignBox.Top = 542
+$imageHAlignBox.Top = 570
 $imageHAlignBox.Width = 190
 $imageHAlignBox.DropDownStyle = "DropDownList"
 [void]$imageHAlignBox.Items.Add("Left")
@@ -789,7 +921,7 @@ $imageHAlignBox.SelectedItem = "Center"
 
 $imageVAlignBox = New-Object System.Windows.Forms.ComboBox
 $imageVAlignBox.Left = 236
-$imageVAlignBox.Top = 542
+$imageVAlignBox.Top = 570
 $imageVAlignBox.Width = 190
 $imageVAlignBox.DropDownStyle = "DropDownList"
 [void]$imageVAlignBox.Items.Add("Top")
@@ -799,7 +931,7 @@ $imageVAlignBox.SelectedItem = "Middle"
 
 $imageStatusLabel = New-Object System.Windows.Forms.Label
 $imageStatusLabel.Left = 346
-$imageStatusLabel.Top = 486
+$imageStatusLabel.Top = 514
 $imageStatusLabel.Width = 130
 $imageStatusLabel.Height = 48
 $imageStatusLabel.AutoEllipsis = $true
@@ -830,11 +962,11 @@ Add-Caption "X offset" 16 330
 Add-Caption "Y offset" 126 330
 Add-Caption "Font size" 236 330
 Add-Caption "Copies" 346 330
-Add-Caption "Horizontal" 16 408
-Add-Caption "Vertical" 236 408
-Add-Caption "Image scale" 236 460
-Add-Caption "Image horizontal" 16 520
-Add-Caption "Image vertical" 236 520
+Add-Caption "Horizontal" 16 436
+Add-Caption "Vertical" 236 436
+Add-Caption "Image scale" 236 488
+Add-Caption "Image horizontal" 16 548
+Add-Caption "Image vertical" 236 548
 
 function Update-Preview {
     $preview.Invalidate()
@@ -860,10 +992,14 @@ $preview.Add_Paint({
         -Ymm ([double]$offsetYBox.Value) `
         -HAlign ([string]$hAlignBox.SelectedItem) `
         -VAlign ([string]$vAlignBox.SelectedItem) `
-        -DisableWrap ([bool]$noWrapBox.Checked)
+        -DisableWrap ([bool]$noWrapBox.Checked) `
+        -UseBold ([bool]$boldBox.Checked) `
+        -UseItalic ([bool]$italicBox.Checked) `
+        -UseUnderline ([bool]$underlineBox.Checked) `
+        -UseStrikeout ([bool]$strikeoutBox.Checked)
 })
 
-$controlsForPreview = @($textBox, $fontBox, $widthBox, $heightBox, $marginBox, $offsetXBox, $offsetYBox, $fontSizeBox, $hAlignBox, $vAlignBox, $imageScaleBox, $imageHAlignBox, $imageVAlignBox)
+$controlsForPreview = @($textBox, $fontBox, $widthBox, $heightBox, $marginBox, $offsetXBox, $offsetYBox, $fontSizeBox, $hAlignBox, $vAlignBox, $imageScaleBox, $imageHAlignBox, $imageVAlignBox, $boldBox, $italicBox, $underlineBox, $strikeoutBox)
 foreach ($control in $controlsForPreview) {
     $control.Add_TextChanged({ Update-Preview })
     if ($control -is [System.Windows.Forms.NumericUpDown]) {
@@ -874,6 +1010,10 @@ foreach ($control in $controlsForPreview) {
     }
 }
 $noWrapBox.Add_CheckedChanged({ Update-Preview })
+$boldBox.Add_CheckedChanged({ Update-Preview })
+$italicBox.Add_CheckedChanged({ Update-Preview })
+$underlineBox.Add_CheckedChanged({ Update-Preview })
+$strikeoutBox.Add_CheckedChanged({ Update-Preview })
 
 $imageButton.Add_Click({
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -935,6 +1075,10 @@ $printButton.Add_Click({
             -HAlign ([string]$hAlignBox.SelectedItem) `
             -VAlign ([string]$vAlignBox.SelectedItem) `
             -DisableWrap ([bool]$noWrapBox.Checked) `
+            -UseBold ([bool]$boldBox.Checked) `
+            -UseItalic ([bool]$italicBox.Checked) `
+            -UseUnderline ([bool]$underlineBox.Checked) `
+            -UseStrikeout ([bool]$strikeoutBox.Checked) `
             -CopyCount ([int]$copiesBox.Value)
         [System.Windows.Forms.MessageBox]::Show("Label sent to printer.", "Done") | Out-Null
     }
@@ -1007,7 +1151,7 @@ $presetButton.Add_Click({
     $gapBox.Value = 3
     $offsetXBox.Value = 0
     $offsetYBox.Value = 0
-    $marginBox.Value = 4
+    $marginBox.Value = 0
     $noWrapBox.Checked = $false
     $hAlignBox.SelectedItem = "Center"
     $vAlignBox.SelectedItem = "Middle"
@@ -1025,6 +1169,7 @@ $form.Controls.AddRange(@(
     $widthBox, $heightBox, $gapBox, $marginBox,
     $offsetXBox, $offsetYBox, $fontSizeBox, $copiesBox,
     $hAlignBox, $vAlignBox, $noWrapBox,
+    $boldBox, $italicBox, $underlineBox, $strikeoutBox,
     $imageButton, $clearImageButton, $imageScaleBox,
     $imageHAlignBox, $imageVAlignBox, $imageStatusLabel,
     $printButton, $homeButton, $feedButton, $calibrateButton,
