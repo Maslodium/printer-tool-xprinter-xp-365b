@@ -10,7 +10,7 @@ param(
     [double]$LabelWidthMm = 57,
     [double]$LabelHeightMm = 39,
     [double]$GapMm = 3,
-    [double]$MarginMm = 4,
+    [double]$MarginMm = 0,
     [double]$OffsetXmm = 0,
     [double]$OffsetYmm = 0,
     [string]$HorizontalAlign = "Center",
@@ -640,6 +640,69 @@ $textBox.ScrollBars = "Vertical"
 $textBox.WordWrap = $false
 $textBox.Text = $Text
 $textBox.Font = New-Object System.Drawing.Font($FontFamily, 14, [System.Drawing.FontStyle]::Bold)
+$script:textHistory = New-Object 'System.Collections.Generic.List[string]'
+$script:textHistory.Add($textBox.Text)
+$script:textHistoryIndex = 0
+$script:isApplyingTextHistory = $false
+
+function Save-TextHistory([string]$value) {
+    if ($script:isApplyingTextHistory) {
+        return
+    }
+
+    if ($script:textHistoryIndex -ge 0 -and $script:textHistory[$script:textHistoryIndex] -eq $value) {
+        return
+    }
+
+    $nextIndex = $script:textHistoryIndex + 1
+    if ($nextIndex -lt $script:textHistory.Count) {
+        $script:textHistory.RemoveRange($nextIndex, $script:textHistory.Count - $nextIndex)
+    }
+
+    $script:textHistory.Add($value)
+    $script:textHistoryIndex = $script:textHistory.Count - 1
+}
+
+$textBox.Add_TextChanged({
+    Save-TextHistory $textBox.Text
+})
+
+$textBox.Add_KeyDown({
+    param($sender, $eventArgs)
+
+    if ($eventArgs.Control -and $eventArgs.Shift -and $eventArgs.KeyCode -eq [System.Windows.Forms.Keys]::Z) {
+        if ($script:textHistoryIndex -lt ($script:textHistory.Count - 1)) {
+            $script:textHistoryIndex += 1
+            $script:isApplyingTextHistory = $true
+            try {
+                $sender.Text = $script:textHistory[$script:textHistoryIndex]
+                $sender.SelectionStart = $sender.TextLength
+            }
+            finally {
+                $script:isApplyingTextHistory = $false
+            }
+        }
+        $eventArgs.SuppressKeyPress = $true
+        $eventArgs.Handled = $true
+        return
+    }
+
+    if ($eventArgs.Control -and -not $eventArgs.Shift -and $eventArgs.KeyCode -eq [System.Windows.Forms.Keys]::Z) {
+        if ($script:textHistoryIndex -gt 0) {
+            $script:textHistoryIndex -= 1
+            $script:isApplyingTextHistory = $true
+            try {
+                $sender.Text = $script:textHistory[$script:textHistoryIndex]
+                $sender.SelectionStart = $sender.TextLength
+            }
+            finally {
+                $script:isApplyingTextHistory = $false
+            }
+        }
+        $eventArgs.SuppressKeyPress = $true
+        $eventArgs.Handled = $true
+    }
+})
 
 $preview = New-Object System.Windows.Forms.Panel
 $preview.Left = 500
@@ -1088,7 +1151,7 @@ $presetButton.Add_Click({
     $gapBox.Value = 3
     $offsetXBox.Value = 0
     $offsetYBox.Value = 0
-    $marginBox.Value = 4
+    $marginBox.Value = 0
     $noWrapBox.Checked = $false
     $hAlignBox.SelectedItem = "Center"
     $vAlignBox.SelectedItem = "Middle"
