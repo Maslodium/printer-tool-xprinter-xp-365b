@@ -275,7 +275,7 @@ function Send-RawPrinterText {
         [string]$DocumentName
     )
 
-    if (-not (Get-Printer -Name $TargetPrinter -ErrorAction SilentlyContinue)) {
+    if (($TargetPrinter -notlike "\\*") -and -not (Get-Printer -Name $TargetPrinter -ErrorAction SilentlyContinue)) {
         throw "Printer '$TargetPrinter' was not found."
     }
 
@@ -293,7 +293,7 @@ function Send-RawPrinterBytes {
         [string]$DocumentName
     )
 
-    if (-not (Get-Printer -Name $TargetPrinter -ErrorAction SilentlyContinue)) {
+    if (($TargetPrinter -notlike "\\*") -and -not (Get-Printer -Name $TargetPrinter -ErrorAction SilentlyContinue)) {
         throw "Printer '$TargetPrinter' was not found."
     }
 
@@ -574,7 +574,7 @@ function Invoke-TsplBitmapPrint {
         [int]$CopyCount
     )
 
-    if (-not (Get-Printer -Name $TargetPrinter -ErrorAction SilentlyContinue)) {
+    if (($TargetPrinter -notlike "\\*") -and -not (Get-Printer -Name $TargetPrinter -ErrorAction SilentlyContinue)) {
         throw "Printer '$TargetPrinter' was not found."
     }
 
@@ -743,6 +743,9 @@ $printerBox.Top = 184
 $printerBox.Width = 360
 $printerBox.DropDownStyle = "DropDownList"
 Get-Printer | ForEach-Object { [void]$printerBox.Items.Add($_.Name) }
+if ($PrinterName -and -not $printerBox.Items.Contains($PrinterName)) {
+    [void]$printerBox.Items.Add($PrinterName)
+}
 $printerBox.SelectedItem = $PrinterName
 if ($printerBox.SelectedIndex -lt 0 -and $printerBox.Items.Count -gt 0) {
     $printerBox.SelectedIndex = 0

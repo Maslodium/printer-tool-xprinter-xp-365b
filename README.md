@@ -9,7 +9,7 @@ Maintained by Maslodium.
 ## Features
 
 - Real-size preview for 57 x 39 mm labels.
-- Direct TSPL bitmap printing through a normal Windows printer or shared printer.
+- Direct TSPL bitmap printing through a normal Windows printer or UNC shared printer.
 - Text editor with installed Windows fonts, bold, italic, underline and strikeout.
 - Text gray level from black to white for thermal print density experiments.
 - Text undo/redo: `Ctrl+Z` and `Ctrl+Shift+Z`.
@@ -24,7 +24,7 @@ Maintained by Maslodium.
 
 - Windows PowerShell 5.1 or the packaged `.exe` build.
 - Xprinter XP-365B driver or a compatible RAW-capable Windows printer queue.
-- A Windows printer name such as `Xprinter XP-365B` or a normal shared queue like `\\HOST\XPrinter_XP365B`.
+- A Windows printer name such as `Xprinter XP-365B` or a normal UNC shared queue like `\\HOST\XPrinter_XP365B`.
 
 ## Run From Source
 
@@ -51,7 +51,7 @@ Windows-редактор этикеток для Xprinter XP-365B и совме�
 ## Возможности
 
 - Предпросмотр по реальным пропорциям этикетки 57 x 39 мм.
-- Прямая TSPL bitmap-печать через обычный Windows-принтер или сетевую шару.
+- Прямая TSPL bitmap-печать через обычный Windows-принтер или UNC-шару.
 - Редактор текста с установленными шрифтами Windows, жирным, курсивом, подчёркиванием и зачёркиванием.
 - Уровень серого для текста: от чёрного до белого для подбора плотности термопечати.
 - Отмена и повтор текста: `Ctrl+Z` и `Ctrl+Shift+Z`.
@@ -66,7 +66,7 @@ Windows-редактор этикеток для Xprinter XP-365B и совме�
 
 - Windows PowerShell 5.1 или собранный `.exe`.
 - Драйвер Xprinter XP-365B или совместимая RAW-очередь печати Windows.
-- Имя принтера Windows, например `Xprinter XP-365B`, либо обычная сетевая очередь вида `\\HOST\XPrinter_XP365B`.
+- Имя принтера Windows, например `Xprinter XP-365B`, либо обычная UNC-очередь вида `\\HOST\XPrinter_XP365B`.
 
 ## Запуск из исходников
 
