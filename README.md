@@ -87,3 +87,4 @@ powershell -STA -NoProfile -ExecutionPolicy Bypass -File .\LabelPrinter.ps1
 Большие изображения копируются в память и уменьшаются до рабочей копии максимум 1200 px по длинной стороне, а затем вписываются в финальную bitmap-картинку этикетки 203 DPI.
 
 Термопринтер физически печатает только чёрные точки, поэтому серые изображения переводятся в точечный растр. Black point / White point / Gamma помогают настроить исходник, а Dither сохраняет полутона через плотность точек.
+<img width="1042" height="743" alt="image" src="https://github.com/user-attachments/assets/bf25d719-aacb-4523-9091-56d195ae8296" />
