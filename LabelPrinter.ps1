@@ -8,6 +8,10 @@ param(
     [bool]$Underline = $false,
     [bool]$Strikeout = $false,
     [int]$TextGray = 0,
+    [int]$ImageBlackPoint = 0,
+    [int]$ImageWhitePoint = 255,
+    [decimal]$ImageGamma = 1.0,
+    [bool]$ImageDither = $true,
     [double]$LabelWidthMm = 57,
     [double]$LabelHeightMm = 39,
     [double]$GapMm = 3,
@@ -141,6 +145,51 @@ function Get-TextRectangle {
     return New-Object System.Drawing.RectangleF($left, $top, $width, $height)
 }
 
+function New-LevelAdjustedImageBitmap {
+    param(
+        [System.Drawing.Image]$Source,
+        [int]$Width,
+        [int]$Height,
+        [int]$BlackPoint,
+        [int]$WhitePoint,
+        [double]$Gamma
+    )
+
+    $targetWidth = [Math]::Max(1, $Width)
+    $targetHeight = [Math]::Max(1, $Height)
+    $black = [Math]::Max(0, [Math]::Min(254, $BlackPoint))
+    $white = [Math]::Max($black + 1, [Math]::Min(255, $WhitePoint))
+    $gammaValue = [Math]::Max(0.1, [Math]::Min(5.0, $Gamma))
+
+    $bitmap = New-Object System.Drawing.Bitmap($targetWidth, $targetHeight, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
+    $bitmap.SetResolution(203, 203)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.Clear([System.Drawing.Color]::White)
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.DrawImage($Source, 0, 0, $targetWidth, $targetHeight)
+    }
+    finally {
+        $graphics.Dispose()
+    }
+
+    for ($y = 0; $y -lt $bitmap.Height; $y++) {
+        for ($x = 0; $x -lt $bitmap.Width; $x++) {
+            $pixel = $bitmap.GetPixel($x, $y)
+            $brightness = (($pixel.R * 0.299) + ($pixel.G * 0.587) + ($pixel.B * 0.114))
+            $normalized = ($brightness - $black) / [double]($white - $black)
+            $normalized = [Math]::Max(0.0, [Math]::Min(1.0, $normalized))
+            $leveled = [Math]::Pow($normalized, 1.0 / $gammaValue)
+            $gray = [Math]::Max(0, [Math]::Min(255, [int][Math]::Round($leveled * 255)))
+            $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($gray, $gray, $gray))
+        }
+    }
+
+    return $bitmap
+}
+
 function Draw-LabelContent {
     param(
         [System.Drawing.Graphics]$Graphics,
@@ -151,6 +200,9 @@ function Draw-LabelContent {
         [int]$ImageScalePercent,
         [string]$ImageHAlign,
         [string]$ImageVAlign,
+        [int]$ImageBlackPoint,
+        [int]$ImageWhitePoint,
+        [double]$ImageGamma,
         [string]$Family,
         [int]$Size,
         [double]$InsetMm,
@@ -211,7 +263,13 @@ function Draw-LabelContent {
             try {
                 $Graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
                 $Graphics.CompositingQuality = [System.Drawing.Drawing2D.CompositingQuality]::HighQuality
-                $Graphics.DrawImage($LabelImage, $imageRect)
+                $adjustedImage = New-LevelAdjustedImageBitmap -Source $LabelImage -Width ([int][Math]::Ceiling($imageW)) -Height ([int][Math]::Ceiling($imageH)) -BlackPoint $ImageBlackPoint -WhitePoint $ImageWhitePoint -Gamma $ImageGamma
+                try {
+                    $Graphics.DrawImage($adjustedImage, $imageRect)
+                }
+                finally {
+                    $adjustedImage.Dispose()
+                }
             }
             finally {
                 $Graphics.InterpolationMode = $oldInterpolation
@@ -350,13 +408,48 @@ function Send-LabelCalibration {
 
 function Convert-BitmapToTsplBytes {
     param(
-        [System.Drawing.Bitmap]$Bitmap
+        [System.Drawing.Bitmap]$Bitmap,
+        [bool]$Dither
     )
 
     $widthBytes = [int][Math]::Ceiling($Bitmap.Width / 8)
     $data = New-Object byte[] ($widthBytes * $Bitmap.Height)
     for ($i = 0; $i -lt $data.Length; $i++) {
         $data[$i] = 255
+    }
+
+    if ($Dither) {
+        $lum = New-Object double[] ($Bitmap.Width * $Bitmap.Height)
+        for ($y = 0; $y -lt $Bitmap.Height; $y++) {
+            for ($x = 0; $x -lt $Bitmap.Width; $x++) {
+                $pixel = $Bitmap.GetPixel($x, $y)
+                $lum[($y * $Bitmap.Width) + $x] = (($pixel.R * 0.299) + ($pixel.G * 0.587) + ($pixel.B * 0.114))
+            }
+        }
+
+        for ($y = 0; $y -lt $Bitmap.Height; $y++) {
+            for ($x = 0; $x -lt $Bitmap.Width; $x++) {
+                $index = ($y * $Bitmap.Width) + $x
+                $old = [Math]::Max(0.0, [Math]::Min(255.0, $lum[$index]))
+                $new = 255.0
+                if ($old -lt 170.0) {
+                    $new = 0.0
+                    $byteIndex = ($y * $widthBytes) + [int][Math]::Floor($x / 8)
+                    $bit = 7 - ($x % 8)
+                    $data[$byteIndex] = $data[$byteIndex] -band (-bnot (1 -shl $bit))
+                }
+
+                $error = $old - $new
+                if ($x + 1 -lt $Bitmap.Width) { $lum[$index + 1] += $error * 7.0 / 16.0 }
+                if ($y + 1 -lt $Bitmap.Height) {
+                    if ($x -gt 0) { $lum[$index + $Bitmap.Width - 1] += $error * 3.0 / 16.0 }
+                    $lum[$index + $Bitmap.Width] += $error * 5.0 / 16.0
+                    if ($x + 1 -lt $Bitmap.Width) { $lum[$index + $Bitmap.Width + 1] += $error * 1.0 / 16.0 }
+                }
+            }
+        }
+
+        return $data
     }
 
     for ($y = 0; $y -lt $Bitmap.Height; $y++) {
@@ -421,6 +514,9 @@ function New-LabelBitmap {
         [int]$ImageScalePercent,
         [string]$ImageHAlign,
         [string]$ImageVAlign,
+        [int]$ImageBlackPoint,
+        [int]$ImageWhitePoint,
+        [double]$ImageGamma,
         [string]$Family,
         [int]$Size,
         [double]$WidthMm,
@@ -455,6 +551,9 @@ function New-LabelBitmap {
             -ImageScalePercent $ImageScalePercent `
             -ImageHAlign $ImageHAlign `
             -ImageVAlign $ImageVAlign `
+            -ImageBlackPoint $ImageBlackPoint `
+            -ImageWhitePoint $ImageWhitePoint `
+            -ImageGamma $ImageGamma `
             -Family $Family `
             -Size $Size `
             -InsetMm $InsetMm `
@@ -486,6 +585,9 @@ function Draw-PrinterBitmapPreview {
         [int]$ImageScalePercent,
         [string]$ImageHAlign,
         [string]$ImageVAlign,
+        [int]$ImageBlackPoint,
+        [int]$ImageWhitePoint,
+        [double]$ImageGamma,
         [string]$Family,
         [int]$Size,
         [double]$WidthMm,
@@ -505,7 +607,7 @@ function Draw-PrinterBitmapPreview {
 
     $Graphics.Clear([System.Drawing.Color]::FromArgb(245, 246, 248))
 
-    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray
+    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -ImageBlackPoint $ImageBlackPoint -ImageWhitePoint $ImageWhitePoint -ImageGamma $ImageGamma -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray
     try {
         $scale = [Math]::Min(($PreviewHost.ClientSize.Width - 36) / $bitmap.Width, ($PreviewHost.ClientSize.Height - 36) / $bitmap.Height)
         $drawW = $bitmap.Width * $scale
@@ -554,6 +656,10 @@ function Invoke-TsplBitmapPrint {
         [int]$ImageScalePercent,
         [string]$ImageHAlign,
         [string]$ImageVAlign,
+        [int]$ImageBlackPoint,
+        [int]$ImageWhitePoint,
+        [double]$ImageGamma,
+        [bool]$ImageDither,
         [string]$TargetPrinter,
         [string]$Family,
         [int]$Size,
@@ -582,9 +688,9 @@ function Invoke-TsplBitmapPrint {
         throw "Font '$Family' was not found."
     }
 
-    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray
+    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -ImageBlackPoint $ImageBlackPoint -ImageWhitePoint $ImageWhitePoint -ImageGamma $ImageGamma -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray
     try {
-        $imageBytes = Convert-BitmapToTsplBytes -Bitmap $bitmap
+        $imageBytes = Convert-BitmapToTsplBytes -Bitmap $bitmap -Dither $ImageDither
         $widthBytes = [int][Math]::Ceiling($bitmap.Width / 8)
         $heightDots = $bitmap.Height
         $widthText = Format-Mm $WidthMm
@@ -615,6 +721,10 @@ function Invoke-LabelPrint {
         [int]$ImageScalePercent,
         [string]$ImageHAlign,
         [string]$ImageVAlign,
+        [int]$ImageBlackPoint,
+        [int]$ImageWhitePoint,
+        [double]$ImageGamma,
+        [bool]$ImageDither,
         [string]$TargetPrinter,
         [string]$Family,
         [int]$Size,
@@ -635,11 +745,11 @@ function Invoke-LabelPrint {
         [int]$CopyCount
     )
 
-    Invoke-TsplBitmapPrint -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -TargetPrinter $TargetPrinter -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -MediaGapMm $MediaGapMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray -CopyCount $CopyCount
+    Invoke-TsplBitmapPrint -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -ImageBlackPoint $ImageBlackPoint -ImageWhitePoint $ImageWhitePoint -ImageGamma $ImageGamma -ImageDither $ImageDither -TargetPrinter $TargetPrinter -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -MediaGapMm $MediaGapMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray -CopyCount $CopyCount
 }
 
 if ($PrintNow) {
-    Invoke-LabelPrint -LabelText $Text -LabelImage $null -ImageScalePercent 100 -ImageHAlign "Center" -ImageVAlign "Middle" -TargetPrinter $PrinterName -Family $FontFamily -Size $FontSize -WidthMm $LabelWidthMm -HeightMm $LabelHeightMm -MediaGapMm $GapMm -InsetMm $MarginMm -Xmm $OffsetXmm -Ymm $OffsetYmm -HAlign $HorizontalAlign -VAlign $VerticalAlign -DisableWrap $NoWrap -UseBold $Bold -UseItalic $Italic -UseUnderline $Underline -UseStrikeout $Strikeout -TextGray $TextGray -CopyCount $Copies
+    Invoke-LabelPrint -LabelText $Text -LabelImage $null -ImageScalePercent 100 -ImageHAlign "Center" -ImageVAlign "Middle" -ImageBlackPoint $ImageBlackPoint -ImageWhitePoint $ImageWhitePoint -ImageGamma ([double]$ImageGamma) -ImageDither $ImageDither -TargetPrinter $PrinterName -Family $FontFamily -Size $FontSize -WidthMm $LabelWidthMm -HeightMm $LabelHeightMm -MediaGapMm $GapMm -InsetMm $MarginMm -Xmm $OffsetXmm -Ymm $OffsetYmm -HAlign $HorizontalAlign -VAlign $VerticalAlign -DisableWrap $NoWrap -UseBold $Bold -UseItalic $Italic -UseUnderline $Underline -UseStrikeout $Strikeout -TextGray $TextGray -CopyCount $Copies
     Write-Host "Sent to printer."
     exit 0
 }
@@ -647,7 +757,7 @@ if ($PrintNow) {
 $form = New-Object System.Windows.Forms.Form
 $form.Text = "Label editor"
 $form.Width = 1040
-$form.Height = 670
+$form.Height = 730
 $form.StartPosition = "CenterScreen"
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
@@ -973,9 +1083,43 @@ $imageVAlignBox.DropDownStyle = "DropDownList"
 [void]$imageVAlignBox.Items.Add("Bottom")
 $imageVAlignBox.SelectedItem = "Middle"
 
+$imageBlackBox = New-Object System.Windows.Forms.NumericUpDown
+$imageBlackBox.Left = 16
+$imageBlackBox.Top = 630
+$imageBlackBox.Width = 88
+$imageBlackBox.Minimum = 0
+$imageBlackBox.Maximum = 254
+$imageBlackBox.Value = [Math]::Max(0, [Math]::Min(254, $ImageBlackPoint))
+
+$imageWhiteBox = New-Object System.Windows.Forms.NumericUpDown
+$imageWhiteBox.Left = 126
+$imageWhiteBox.Top = 630
+$imageWhiteBox.Width = 88
+$imageWhiteBox.Minimum = 1
+$imageWhiteBox.Maximum = 255
+$imageWhiteBox.Value = [Math]::Max([int]$imageBlackBox.Value + 1, [Math]::Min(255, $ImageWhitePoint))
+
+$imageGammaBox = New-Object System.Windows.Forms.NumericUpDown
+$imageGammaBox.Left = 236
+$imageGammaBox.Top = 630
+$imageGammaBox.Width = 88
+$imageGammaBox.Minimum = 0.1
+$imageGammaBox.Maximum = 5
+$imageGammaBox.DecimalPlaces = 2
+$imageGammaBox.Increment = 0.1
+$imageGammaBox.Value = [decimal][Math]::Max(0.1, [Math]::Min(5.0, [double]$ImageGamma))
+
+$imageDitherBox = New-Object System.Windows.Forms.CheckBox
+$imageDitherBox.Left = 346
+$imageDitherBox.Top = 632
+$imageDitherBox.Width = 100
+$imageDitherBox.Height = 22
+$imageDitherBox.Text = "Dither"
+$imageDitherBox.Checked = [bool]$ImageDither
+
 $imageStatusLabel = New-Object System.Windows.Forms.Label
 $imageStatusLabel.Left = 16
-$imageStatusLabel.Top = 608
+$imageStatusLabel.Top = 668
 $imageStatusLabel.Width = 410
 $imageStatusLabel.Height = 30
 $imageStatusLabel.AutoEllipsis = $true
@@ -1012,6 +1156,9 @@ Add-Caption "Vertical" 236 436
 Add-Caption "Image scale" 236 488
 Add-Caption "Image horizontal" 16 548
 Add-Caption "Image vertical" 236 548
+Add-Caption "Black point" 16 604
+Add-Caption "White point" 126 604
+Add-Caption "Gamma" 236 604
 
 function Update-Preview {
     $preview.Invalidate()
@@ -1128,6 +1275,9 @@ $preview.Add_Paint({
         -ImageScalePercent ([int]$imageScaleBox.Value) `
         -ImageHAlign ([string]$imageHAlignBox.SelectedItem) `
         -ImageVAlign ([string]$imageVAlignBox.SelectedItem) `
+        -ImageBlackPoint ([int]$imageBlackBox.Value) `
+        -ImageWhitePoint ([int]$imageWhiteBox.Value) `
+        -ImageGamma ([double]$imageGammaBox.Value) `
         -Family $fontBox.Text `
         -Size ([int]$fontSizeBox.Value) `
         -WidthMm ([double]$widthBox.Value) `
@@ -1145,7 +1295,7 @@ $preview.Add_Paint({
         -TextGray ([int]$textGrayBox.Value)
 })
 
-$controlsForPreview = @($textBox, $fontBox, $widthBox, $heightBox, $marginBox, $offsetXBox, $offsetYBox, $fontSizeBox, $textGrayBox, $hAlignBox, $vAlignBox, $imageScaleBox, $imageHAlignBox, $imageVAlignBox, $boldBox, $italicBox, $underlineBox, $strikeoutBox)
+$controlsForPreview = @($textBox, $fontBox, $widthBox, $heightBox, $marginBox, $offsetXBox, $offsetYBox, $fontSizeBox, $textGrayBox, $hAlignBox, $vAlignBox, $imageScaleBox, $imageHAlignBox, $imageVAlignBox, $imageBlackBox, $imageWhiteBox, $imageGammaBox, $boldBox, $italicBox, $underlineBox, $strikeoutBox, $imageDitherBox)
 foreach ($control in $controlsForPreview) {
     $control.Add_TextChanged({ Update-Preview })
     if ($control -is [System.Windows.Forms.NumericUpDown]) {
@@ -1160,6 +1310,18 @@ $boldBox.Add_CheckedChanged({ Update-Preview })
 $italicBox.Add_CheckedChanged({ Update-Preview })
 $underlineBox.Add_CheckedChanged({ Update-Preview })
 $strikeoutBox.Add_CheckedChanged({ Update-Preview })
+$imageBlackBox.Add_ValueChanged({
+    if ([int]$imageWhiteBox.Value -le [int]$imageBlackBox.Value) {
+        $imageWhiteBox.Value = [Math]::Min(255, [int]$imageBlackBox.Value + 1)
+    }
+    Update-Preview
+})
+$imageWhiteBox.Add_ValueChanged({
+    if ([int]$imageWhiteBox.Value -le [int]$imageBlackBox.Value) {
+        $imageBlackBox.Value = [Math]::Max(0, [int]$imageWhiteBox.Value - 1)
+    }
+    Update-Preview
+})
 
 $imageButton.Add_Click({
     $dialog = New-Object System.Windows.Forms.OpenFileDialog
@@ -1230,6 +1392,10 @@ $printButton.Add_Click({
             -ImageScalePercent ([int]$imageScaleBox.Value) `
             -ImageHAlign ([string]$imageHAlignBox.SelectedItem) `
             -ImageVAlign ([string]$imageVAlignBox.SelectedItem) `
+            -ImageBlackPoint ([int]$imageBlackBox.Value) `
+            -ImageWhitePoint ([int]$imageWhiteBox.Value) `
+            -ImageGamma ([double]$imageGammaBox.Value) `
+            -ImageDither ([bool]$imageDitherBox.Checked) `
             -TargetPrinter ([string]$printerBox.SelectedItem) `
             -Family $fontBox.Text `
             -Size ([int]$fontSizeBox.Value) `
@@ -1321,6 +1487,10 @@ $presetButton.Add_Click({
     $offsetYBox.Value = 0
     $marginBox.Value = 0
     $textGrayBox.Value = 0
+    $imageBlackBox.Value = 0
+    $imageWhiteBox.Value = 255
+    $imageGammaBox.Value = 1
+    $imageDitherBox.Checked = $true
     $noWrapBox.Checked = $false
     $hAlignBox.SelectedItem = "Center"
     $vAlignBox.SelectedItem = "Middle"
@@ -1340,7 +1510,8 @@ $form.Controls.AddRange(@(
     $hAlignBox, $vAlignBox, $noWrapBox,
     $boldBox, $italicBox, $underlineBox, $strikeoutBox,
     $imageButton, $pasteImageButton, $clearImageButton, $imageScaleBox,
-    $imageHAlignBox, $imageVAlignBox, $imageStatusLabel,
+    $imageHAlignBox, $imageVAlignBox, $imageBlackBox, $imageWhiteBox,
+    $imageGammaBox, $imageDitherBox, $imageStatusLabel,
     $printButton, $homeButton, $feedButton, $calibrateButton,
     $presetButton, $note
 ))

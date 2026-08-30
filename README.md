@@ -17,6 +17,8 @@ Maintained by Maslodium.
 - Image import with automatic downscaling for large files.
 - Drag-and-drop image loading.
 - Image paste from clipboard with `Ctrl+V` or the `Paste image` button.
+- Image black point, white point and gamma controls for thermal print preparation.
+- Floyd-Steinberg dithering for image-like halftones on monochrome label printers.
 - Image scaling and horizontal/vertical alignment.
 - Home, Feed label and Calibrate commands for label roll positioning.
 
@@ -37,6 +39,8 @@ powershell -STA -NoProfile -ExecutionPolicy Bypass -File .\LabelPrinter.ps1
 The printer is used as a RAW TSPL device. The Windows printer driver is only the transport to the USB or shared printer.
 
 Large images are copied into memory and reduced to a maximum 1200 px working copy before they are fitted into the final 203 DPI label bitmap, so oversized source images do not get sent to the printer directly.
+
+Thermal printers are physically monochrome, so gray images are converted into black dots. Use Black point / White point / Gamma to tune the source image, and Dither to preserve midtones as dot density.
 
 ---
 
@@ -59,6 +63,8 @@ Windows-редактор этикеток для Xprinter XP-365B и совме�
 - Импорт изображений с автоматическим уменьшением больших файлов.
 - Загрузка изображения drag-and-drop.
 - Вставка изображения из буфера обмена через `Ctrl+V` или кнопку `Paste image`.
+- Black point, White point и Gamma для подготовки изображения под термопечать.
+- Floyd-Steinberg dithering, чтобы полутона превращались в плотность точек, а не в грубый порог.
 - Масштаб и выравнивание изображения.
 - Команды Home, Feed label и Calibrate для подачи и калибровки этикеток.
 
@@ -79,3 +85,5 @@ powershell -STA -NoProfile -ExecutionPolicy Bypass -File .\LabelPrinter.ps1
 Принтер используется как RAW TSPL-устройство. Windows-драйвер нужен только как транспорт до USB-принтера или сетевой шары.
 
 Большие изображения копируются в память и уменьшаются до рабочей копии максимум 1200 px по длинной стороне, а затем вписываются в финальную bitmap-картинку этикетки 203 DPI.
+
+Термопринтер физически печатает только чёрные точки, поэтому серые изображения переводятся в точечный растр. Black point / White point / Gamma помогают настроить исходник, а Dither сохраняет полутона через плотность точек.
