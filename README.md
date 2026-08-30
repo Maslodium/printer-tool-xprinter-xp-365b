@@ -11,6 +11,7 @@ Maintained by Maslodium.
 - Real-size preview for 57 x 39 mm labels.
 - Direct TSPL bitmap printing through a normal Windows printer or shared printer.
 - Text editor with installed Windows fonts, bold, italic, underline and strikeout.
+- Text gray level from black to white for thermal print density experiments.
 - Text undo/redo: `Ctrl+Z` and `Ctrl+Shift+Z`.
 - No-wrap mode for short one-line labels.
 - Image import with automatic downscaling for large files.
@@ -52,6 +53,7 @@ Windows-редактор этикеток для Xprinter XP-365B и совме�
 - Предпросмотр по реальным пропорциям этикетки 57 x 39 мм.
 - Прямая TSPL bitmap-печать через обычный Windows-принтер или сетевую шару.
 - Редактор текста с установленными шрифтами Windows, жирным, курсивом, подчёркиванием и зачёркиванием.
+- Уровень серого для текста: от чёрного до белого для подбора плотности термопечати.
 - Отмена и повтор текста: `Ctrl+Z` и `Ctrl+Shift+Z`.
 - Режим No wrap для коротких однострочных этикеток.
 - Импорт изображений с автоматическим уменьшением больших файлов.

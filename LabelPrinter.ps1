@@ -7,6 +7,7 @@ param(
     [bool]$Italic = $false,
     [bool]$Underline = $false,
     [bool]$Strikeout = $false,
+    [int]$TextGray = 0,
     [double]$LabelWidthMm = 57,
     [double]$LabelHeightMm = 39,
     [double]$GapMm = 3,
@@ -162,6 +163,7 @@ function Draw-LabelContent {
         [bool]$UseItalic,
         [bool]$UseUnderline,
         [bool]$UseStrikeout,
+        [int]$TextGray,
         [bool]$Preview
     )
 
@@ -251,7 +253,14 @@ function Draw-LabelContent {
             $drawSize -= 1
             $font = New-Object System.Drawing.Font($Family, $drawSize, $fontStyle, [System.Drawing.GraphicsUnit]::Point)
         }
-        $Graphics.DrawString($LabelText, $font, [System.Drawing.Brushes]::Black, $textRect, $format)
+        $gray = [Math]::Max(0, [Math]::Min(255, $TextGray))
+        $textBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb($gray, $gray, $gray))
+        try {
+            $Graphics.DrawString($LabelText, $font, $textBrush, $textRect, $format)
+        }
+        finally {
+            $textBrush.Dispose()
+        }
     }
     finally {
         $font.Dispose()
@@ -425,7 +434,8 @@ function New-LabelBitmap {
         [bool]$UseBold,
         [bool]$UseItalic,
         [bool]$UseUnderline,
-        [bool]$UseStrikeout
+        [bool]$UseStrikeout,
+        [int]$TextGray
     )
 
     $widthDots = Convert-MmToDots $WidthMm
@@ -457,6 +467,7 @@ function New-LabelBitmap {
             -UseItalic $UseItalic `
             -UseUnderline $UseUnderline `
             -UseStrikeout $UseStrikeout `
+            -TextGray $TextGray `
             -Preview $false
     }
     finally {
@@ -488,12 +499,13 @@ function Draw-PrinterBitmapPreview {
         [bool]$UseBold,
         [bool]$UseItalic,
         [bool]$UseUnderline,
-        [bool]$UseStrikeout
+        [bool]$UseStrikeout,
+        [int]$TextGray
     )
 
     $Graphics.Clear([System.Drawing.Color]::FromArgb(245, 246, 248))
 
-    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout
+    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray
     try {
         $scale = [Math]::Min(($PreviewHost.ClientSize.Width - 36) / $bitmap.Width, ($PreviewHost.ClientSize.Height - 36) / $bitmap.Height)
         $drawW = $bitmap.Width * $scale
@@ -558,6 +570,7 @@ function Invoke-TsplBitmapPrint {
         [bool]$UseItalic,
         [bool]$UseUnderline,
         [bool]$UseStrikeout,
+        [int]$TextGray,
         [int]$CopyCount
     )
 
@@ -569,7 +582,7 @@ function Invoke-TsplBitmapPrint {
         throw "Font '$Family' was not found."
     }
 
-    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout
+    $bitmap = New-LabelBitmap -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray
     try {
         $imageBytes = Convert-BitmapToTsplBytes -Bitmap $bitmap
         $widthBytes = [int][Math]::Ceiling($bitmap.Width / 8)
@@ -618,14 +631,15 @@ function Invoke-LabelPrint {
         [bool]$UseItalic,
         [bool]$UseUnderline,
         [bool]$UseStrikeout,
+        [int]$TextGray,
         [int]$CopyCount
     )
 
-    Invoke-TsplBitmapPrint -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -TargetPrinter $TargetPrinter -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -MediaGapMm $MediaGapMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -CopyCount $CopyCount
+    Invoke-TsplBitmapPrint -LabelText $LabelText -LabelImage $LabelImage -ImageScalePercent $ImageScalePercent -ImageHAlign $ImageHAlign -ImageVAlign $ImageVAlign -TargetPrinter $TargetPrinter -Family $Family -Size $Size -WidthMm $WidthMm -HeightMm $HeightMm -MediaGapMm $MediaGapMm -InsetMm $InsetMm -Xmm $Xmm -Ymm $Ymm -HAlign $HAlign -VAlign $VAlign -DisableWrap $DisableWrap -UseBold $UseBold -UseItalic $UseItalic -UseUnderline $UseUnderline -UseStrikeout $UseStrikeout -TextGray $TextGray -CopyCount $CopyCount
 }
 
 if ($PrintNow) {
-    Invoke-LabelPrint -LabelText $Text -LabelImage $null -ImageScalePercent 100 -ImageHAlign "Center" -ImageVAlign "Middle" -TargetPrinter $PrinterName -Family $FontFamily -Size $FontSize -WidthMm $LabelWidthMm -HeightMm $LabelHeightMm -MediaGapMm $GapMm -InsetMm $MarginMm -Xmm $OffsetXmm -Ymm $OffsetYmm -HAlign $HorizontalAlign -VAlign $VerticalAlign -DisableWrap $NoWrap -UseBold $Bold -UseItalic $Italic -UseUnderline $Underline -UseStrikeout $Strikeout -CopyCount $Copies
+    Invoke-LabelPrint -LabelText $Text -LabelImage $null -ImageScalePercent 100 -ImageHAlign "Center" -ImageVAlign "Middle" -TargetPrinter $PrinterName -Family $FontFamily -Size $FontSize -WidthMm $LabelWidthMm -HeightMm $LabelHeightMm -MediaGapMm $GapMm -InsetMm $MarginMm -Xmm $OffsetXmm -Ymm $OffsetYmm -HAlign $HorizontalAlign -VAlign $VerticalAlign -DisableWrap $NoWrap -UseBold $Bold -UseItalic $Italic -UseUnderline $Underline -UseStrikeout $Strikeout -TextGray $TextGray -CopyCount $Copies
     Write-Host "Sent to printer."
     exit 0
 }
@@ -826,10 +840,18 @@ $fontSizeBox.Minimum = 6
 $fontSizeBox.Maximum = 72
 $fontSizeBox.Value = $FontSize
 
+$textGrayBox = New-Object System.Windows.Forms.NumericUpDown
+$textGrayBox.Left = 326
+$textGrayBox.Top = 356
+$textGrayBox.Width = 58
+$textGrayBox.Minimum = 0
+$textGrayBox.Maximum = 255
+$textGrayBox.Value = [Math]::Max(0, [Math]::Min(255, $TextGray))
+
 $copiesBox = New-Object System.Windows.Forms.NumericUpDown
-$copiesBox.Left = 346
+$copiesBox.Left = 398
 $copiesBox.Top = 356
-$copiesBox.Width = 88
+$copiesBox.Width = 58
 $copiesBox.Minimum = 1
 $copiesBox.Maximum = 99
 $copiesBox.Value = $Copies
@@ -958,12 +980,12 @@ $imageStatusLabel.Text = "No image. Drop a file here or press Ctrl+V to paste an
 
 $captionLabels = New-Object System.Collections.ArrayList
 
-function Add-Caption([string]$caption, [int]$left, [int]$top) {
+function Add-Caption([string]$caption, [int]$left, [int]$top, [int]$width = 105) {
     $label = New-Object System.Windows.Forms.Label
     $label.Text = $caption
     $label.Left = $left
     $label.Top = $top
-    $label.Width = 105
+    $label.Width = $width
     $label.Height = 22
     $label.BackColor = $form.BackColor
     $label.AutoEllipsis = $true
@@ -980,7 +1002,8 @@ Add-Caption "Margin, mm" 346 260
 Add-Caption "X offset" 16 330
 Add-Caption "Y offset" 126 330
 Add-Caption "Font size" 236 330
-Add-Caption "Copies" 346 330
+Add-Caption "Text gray" 326 330 70
+Add-Caption "Copies" 398 330 58
 Add-Caption "Horizontal" 16 436
 Add-Caption "Vertical" 236 436
 Add-Caption "Image scale" 236 488
@@ -1115,10 +1138,11 @@ $preview.Add_Paint({
         -UseBold ([bool]$boldBox.Checked) `
         -UseItalic ([bool]$italicBox.Checked) `
         -UseUnderline ([bool]$underlineBox.Checked) `
-        -UseStrikeout ([bool]$strikeoutBox.Checked)
+        -UseStrikeout ([bool]$strikeoutBox.Checked) `
+        -TextGray ([int]$textGrayBox.Value)
 })
 
-$controlsForPreview = @($textBox, $fontBox, $widthBox, $heightBox, $marginBox, $offsetXBox, $offsetYBox, $fontSizeBox, $hAlignBox, $vAlignBox, $imageScaleBox, $imageHAlignBox, $imageVAlignBox, $boldBox, $italicBox, $underlineBox, $strikeoutBox)
+$controlsForPreview = @($textBox, $fontBox, $widthBox, $heightBox, $marginBox, $offsetXBox, $offsetYBox, $fontSizeBox, $textGrayBox, $hAlignBox, $vAlignBox, $imageScaleBox, $imageHAlignBox, $imageVAlignBox, $boldBox, $italicBox, $underlineBox, $strikeoutBox)
 foreach ($control in $controlsForPreview) {
     $control.Add_TextChanged({ Update-Preview })
     if ($control -is [System.Windows.Forms.NumericUpDown]) {
@@ -1219,6 +1243,7 @@ $printButton.Add_Click({
             -UseItalic ([bool]$italicBox.Checked) `
             -UseUnderline ([bool]$underlineBox.Checked) `
             -UseStrikeout ([bool]$strikeoutBox.Checked) `
+            -TextGray ([int]$textGrayBox.Value) `
             -CopyCount ([int]$copiesBox.Value)
         [System.Windows.Forms.MessageBox]::Show("Label sent to printer.", "Done") | Out-Null
     }
@@ -1292,6 +1317,7 @@ $presetButton.Add_Click({
     $offsetXBox.Value = 0
     $offsetYBox.Value = 0
     $marginBox.Value = 0
+    $textGrayBox.Value = 0
     $noWrapBox.Checked = $false
     $hAlignBox.SelectedItem = "Center"
     $vAlignBox.SelectedItem = "Middle"
@@ -1307,7 +1333,7 @@ $note.Text = "Print uses direct TSPL bitmap, not Windows page layout. Use Calibr
 $form.Controls.AddRange(@(
     $textBox, $preview, $printerBox, $fontBox,
     $widthBox, $heightBox, $gapBox, $marginBox,
-    $offsetXBox, $offsetYBox, $fontSizeBox, $copiesBox,
+    $offsetXBox, $offsetYBox, $fontSizeBox, $textGrayBox, $copiesBox,
     $hAlignBox, $vAlignBox, $noWrapBox,
     $boldBox, $italicBox, $underlineBox, $strikeoutBox,
     $imageButton, $pasteImageButton, $clearImageButton, $imageScaleBox,
