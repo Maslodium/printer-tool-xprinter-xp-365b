@@ -365,6 +365,32 @@ function Convert-BitmapToTsplBytes {
     return $data
 }
 
+function New-EditorImageCopyFromImage {
+    param(
+        [System.Drawing.Image]$Source
+    )
+
+    $maxSide = 1200
+    $scale = [Math]::Min(1.0, $maxSide / [double][Math]::Max($Source.Width, $Source.Height))
+    $targetWidth = [Math]::Max(1, [int][Math]::Round($Source.Width * $scale))
+    $targetHeight = [Math]::Max(1, [int][Math]::Round($Source.Height * $scale))
+
+    $copy = New-Object System.Drawing.Bitmap($targetWidth, $targetHeight, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
+    $copy.SetResolution(203, 203)
+    $graphics = [System.Drawing.Graphics]::FromImage($copy)
+    try {
+        $graphics.Clear([System.Drawing.Color]::White)
+        $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+        $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
+        $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
+        $graphics.DrawImage($Source, 0, 0, $targetWidth, $targetHeight)
+    }
+    finally {
+        $graphics.Dispose()
+    }
+    return $copy
+}
+
 function New-EditorImageCopy {
     param(
         [string]$Path
@@ -372,25 +398,7 @@ function New-EditorImageCopy {
 
     $source = [System.Drawing.Image]::FromFile($Path)
     try {
-        $maxSide = 1200
-        $scale = [Math]::Min(1.0, $maxSide / [double][Math]::Max($source.Width, $source.Height))
-        $targetWidth = [Math]::Max(1, [int][Math]::Round($source.Width * $scale))
-        $targetHeight = [Math]::Max(1, [int][Math]::Round($source.Height * $scale))
-
-        $copy = New-Object System.Drawing.Bitmap($targetWidth, $targetHeight, [System.Drawing.Imaging.PixelFormat]::Format24bppRgb)
-        $copy.SetResolution(203, 203)
-        $graphics = [System.Drawing.Graphics]::FromImage($copy)
-        try {
-            $graphics.Clear([System.Drawing.Color]::White)
-            $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
-            $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
-            $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-            $graphics.DrawImage($source, 0, 0, $targetWidth, $targetHeight)
-        }
-        finally {
-            $graphics.Dispose()
-        }
-        return $copy
+        return New-EditorImageCopyFromImage -Source $source
     }
     finally {
         $source.Dispose()
@@ -629,6 +637,8 @@ $form.Height = 670
 $form.StartPosition = "CenterScreen"
 $form.Font = New-Object System.Drawing.Font("Segoe UI", 10)
 $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::Dpi
+$form.KeyPreview = $true
+$form.AllowDrop = $true
 
 $textBox = New-Object System.Windows.Forms.TextBox
 $textBox.Left = 16
@@ -640,6 +650,7 @@ $textBox.ScrollBars = "Vertical"
 $textBox.WordWrap = $false
 $textBox.Text = $Text
 $textBox.Font = New-Object System.Drawing.Font($FontFamily, 14, [System.Drawing.FontStyle]::Bold)
+$textBox.AllowDrop = $true
 $script:textHistory = New-Object 'System.Collections.Generic.List[string]'
 $script:textHistory.Add($textBox.Text)
 $script:textHistoryIndex = 0
@@ -710,6 +721,7 @@ $preview.Top = 16
 $preview.Width = 500
 $preview.Height = 390
 $preview.BackColor = [System.Drawing.Color]::FromArgb(245, 246, 248)
+$preview.AllowDrop = $true
 
 $printerBox = New-Object System.Windows.Forms.ComboBox
 $printerBox.Left = 16
@@ -894,15 +906,22 @@ $imageButton.Top = 510
 $imageButton.Width = 100
 $imageButton.Height = 34
 
+$pasteImageButton = New-Object System.Windows.Forms.Button
+$pasteImageButton.Text = "Paste image"
+$pasteImageButton.Left = 126
+$pasteImageButton.Top = 510
+$pasteImageButton.Width = 100
+$pasteImageButton.Height = 34
+
 $clearImageButton = New-Object System.Windows.Forms.Button
 $clearImageButton.Text = "Clear image"
-$clearImageButton.Left = 126
+$clearImageButton.Left = 236
 $clearImageButton.Top = 510
 $clearImageButton.Width = 100
 $clearImageButton.Height = 34
 
 $imageScaleBox = New-Object System.Windows.Forms.NumericUpDown
-$imageScaleBox.Left = 236
+$imageScaleBox.Left = 346
 $imageScaleBox.Top = 510
 $imageScaleBox.Width = 88
 $imageScaleBox.Minimum = 5
@@ -930,12 +949,12 @@ $imageVAlignBox.DropDownStyle = "DropDownList"
 $imageVAlignBox.SelectedItem = "Middle"
 
 $imageStatusLabel = New-Object System.Windows.Forms.Label
-$imageStatusLabel.Left = 346
-$imageStatusLabel.Top = 514
-$imageStatusLabel.Width = 130
-$imageStatusLabel.Height = 48
+$imageStatusLabel.Left = 16
+$imageStatusLabel.Top = 608
+$imageStatusLabel.Width = 410
+$imageStatusLabel.Height = 30
 $imageStatusLabel.AutoEllipsis = $true
-$imageStatusLabel.Text = "No image"
+$imageStatusLabel.Text = "No image. Drop a file here or press Ctrl+V to paste an image."
 
 $captionLabels = New-Object System.Collections.ArrayList
 
@@ -970,6 +989,106 @@ Add-Caption "Image vertical" 236 548
 
 function Update-Preview {
     $preview.Invalidate()
+}
+
+function Set-LoadedEditorImage {
+    param(
+        [System.Drawing.Image]$Image,
+        [string]$SourceName
+    )
+
+    if ($script:loadedImage -ne $null) {
+        $script:loadedImage.Dispose()
+    }
+    $script:loadedImage = $Image
+    $script:loadedImagePath = $SourceName
+    $imageStatusLabel.Text = "$SourceName ($($Image.Width)x$($Image.Height))"
+    Update-Preview
+}
+
+function Import-EditorImageFile {
+    param(
+        [string]$Path
+    )
+
+    if (-not [System.IO.File]::Exists($Path)) {
+        throw "Image file was not found: $Path"
+    }
+
+    $newImage = New-EditorImageCopy -Path $Path
+    Set-LoadedEditorImage -Image $newImage -SourceName ([System.IO.Path]::GetFileName($Path))
+}
+
+function Import-EditorClipboardImage {
+    if (-not [System.Windows.Forms.Clipboard]::ContainsImage()) {
+        throw "Clipboard does not contain an image."
+    }
+
+    $clipboardImage = [System.Windows.Forms.Clipboard]::GetImage()
+    if ($clipboardImage -eq $null) {
+        throw "Clipboard image could not be read."
+    }
+
+    try {
+        $newImage = New-EditorImageCopyFromImage -Source $clipboardImage
+        Set-LoadedEditorImage -Image $newImage -SourceName "Clipboard image"
+    }
+    finally {
+        $clipboardImage.Dispose()
+    }
+}
+
+function Import-EditorDropData {
+    param(
+        [System.Windows.Forms.IDataObject]$Data
+    )
+
+    if ($Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {
+        $files = [string[]]$Data.GetData([System.Windows.Forms.DataFormats]::FileDrop)
+        if ($files.Count -gt 0) {
+            Import-EditorImageFile -Path $files[0]
+            return
+        }
+    }
+
+    if ($Data.GetDataPresent([System.Windows.Forms.DataFormats]::Bitmap)) {
+        $dropImage = $Data.GetData([System.Windows.Forms.DataFormats]::Bitmap)
+        if ($dropImage -ne $null) {
+            $newImage = New-EditorImageCopyFromImage -Source $dropImage
+            Set-LoadedEditorImage -Image $newImage -SourceName "Dropped image"
+            return
+        }
+    }
+
+    throw "Drop an image file or image data."
+}
+
+function Enable-ImageDropTarget {
+    param(
+        [System.Windows.Forms.Control]$Control
+    )
+
+    $Control.Add_DragEnter({
+        param($sender, $eventArgs)
+
+        if ($eventArgs.Data.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop) -or $eventArgs.Data.GetDataPresent([System.Windows.Forms.DataFormats]::Bitmap)) {
+            $eventArgs.Effect = [System.Windows.Forms.DragDropEffects]::Copy
+        }
+        else {
+            $eventArgs.Effect = [System.Windows.Forms.DragDropEffects]::None
+        }
+    })
+
+    $Control.Add_DragDrop({
+        param($sender, $eventArgs)
+
+        try {
+            Import-EditorDropData -Data $eventArgs.Data
+        }
+        catch {
+            [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Image error") | Out-Null
+        }
+    })
 }
 
 $preview.Add_Paint({
@@ -1021,14 +1140,7 @@ $imageButton.Add_Click({
     $dialog.Filter = "Images|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files|*.*"
     try {
         if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            $newImage = New-EditorImageCopy -Path $dialog.FileName
-            if ($script:loadedImage -ne $null) {
-                $script:loadedImage.Dispose()
-            }
-            $script:loadedImage = $newImage
-            $script:loadedImagePath = $dialog.FileName
-            $imageStatusLabel.Text = [System.IO.Path]::GetFileName($dialog.FileName)
-            Update-Preview
+            Import-EditorImageFile -Path $dialog.FileName
         }
     }
     catch {
@@ -1039,15 +1151,43 @@ $imageButton.Add_Click({
     }
 })
 
+$pasteImageButton.Add_Click({
+    try {
+        Import-EditorClipboardImage
+    }
+    catch {
+        [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Image error") | Out-Null
+    }
+})
+
 $clearImageButton.Add_Click({
     if ($script:loadedImage -ne $null) {
         $script:loadedImage.Dispose()
         $script:loadedImage = $null
     }
     $script:loadedImagePath = ""
-    $imageStatusLabel.Text = "No image"
+    $imageStatusLabel.Text = "No image. Drop a file here or press Ctrl+V to paste an image."
     Update-Preview
 })
+
+$form.Add_KeyDown({
+    param($sender, $eventArgs)
+
+    if ($eventArgs.Control -and -not $eventArgs.Shift -and $eventArgs.KeyCode -eq [System.Windows.Forms.Keys]::V -and [System.Windows.Forms.Clipboard]::ContainsImage()) {
+        try {
+            Import-EditorClipboardImage
+            $eventArgs.SuppressKeyPress = $true
+            $eventArgs.Handled = $true
+        }
+        catch {
+            [System.Windows.Forms.MessageBox]::Show($_.Exception.Message, "Image error") | Out-Null
+        }
+    }
+})
+
+Enable-ImageDropTarget -Control $form
+Enable-ImageDropTarget -Control $textBox
+Enable-ImageDropTarget -Control $preview
 
 $printButton = New-Object System.Windows.Forms.Button
 $printButton.Text = "Print"
@@ -1170,7 +1310,7 @@ $form.Controls.AddRange(@(
     $offsetXBox, $offsetYBox, $fontSizeBox, $copiesBox,
     $hAlignBox, $vAlignBox, $noWrapBox,
     $boldBox, $italicBox, $underlineBox, $strikeoutBox,
-    $imageButton, $clearImageButton, $imageScaleBox,
+    $imageButton, $pasteImageButton, $clearImageButton, $imageScaleBox,
     $imageHAlignBox, $imageVAlignBox, $imageStatusLabel,
     $printButton, $homeButton, $feedButton, $calibrateButton,
     $presetButton, $note
